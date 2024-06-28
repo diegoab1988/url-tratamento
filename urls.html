@@ -1,0 +1,179 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Verificação de URLs</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+    }
+
+    .content {
+      padding: 20px;
+      display: flex;
+      flex-direction: column;
+      justify-content: center;
+      align-items: center;
+    }
+
+    table {
+      width: 100%;
+      border-collapse: collapse;
+    }
+
+    th,
+    td {
+      border: 1px solid black;
+      padding: 8px;
+      text-align: left;
+    }
+
+    th {
+      background-color: #f2f2f2;
+    }
+
+    .blocked {
+      color: red;
+    }
+
+    .accessible {
+      color: green;
+    }
+
+    .not-accessible {
+      color: yellow;
+    }
+
+    #progressContainer {
+      margin-top: 20px;
+      width: 100%;
+      background-color: #f3f3f3;
+    }
+
+    #progressBar {
+      width: 0%;
+      height: 30px;
+      background-color: #4caf50;
+      text-align: center;
+      line-height: 30px;
+      color: white;
+    }
+
+    #formattedList {
+      display: none; /* Inicialmente oculta a área de texto */
+    }
+  </style>
+</head>
+
+<body>
+  <div class="content">
+    <h1>Verificação de URLs</h1>
+    <form id="urlForm">
+      <label for="urls">Insira as URLs (uma por linha):</label><br>
+      <textarea id="urls" name="urls" rows="10" cols="50"></textarea><br>
+      <button type="submit">Verificar URLs</button>
+    </form>
+    <div id="progressContainer">
+      <div id="progressBar">0%</div>
+    </div>
+    <h2>Resultados:</h2>
+    <button id="formatButton">Formatar Lista</button>
+    <table id="resultsTable">
+      <thead>
+        <tr>
+          <th>Site</th>
+          <th>Status</th>
+          <th>IP</th>
+        </tr>
+      </thead>
+      <tbody>
+      </tbody>
+    </table>
+    <textarea id="formattedList" rows="10" cols="50" readonly></textarea> <!-- Área de texto para os links formatados -->
+  </div>
+  <script>
+    document.getElementById('urlForm').addEventListener('submit', async function(event) {
+  event.preventDefault();
+  const urls = document.getElementById('urls').value.split('\n').map(url => url.trim()).filter(url => url);
+  const totalUrls = urls.length;
+  const progressBar = document.getElementById('progressBar');
+
+  const updateProgressBar = (completed) => {
+    const percentage = Math.round((completed / totalUrls) * 100);
+    progressBar.style.width = percentage + '%';
+    progressBar.textContent = percentage + '%';
+  };
+
+  const results = [];
+  for (let i = 0; i < urls.length; i++) {
+    const url = urls[i];
+    const response = await fetch('/consultar-sites', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ websites: [url] })
+    });
+    const result = await response.json();
+    results.push(result.table[0]);
+    updateProgressBar(i + 1);
+  }
+
+  displayResults(results);
+
+  // Exibe a tabela e oculta a área de texto
+  document.getElementById('resultsTable').style.display = 'table';
+  document.getElementById('formattedList').style.display = 'none';
+});
+
+function displayResults(results) {
+  const tbody = document.getElementById('resultsTable').querySelector('tbody');
+  tbody.innerHTML = '';
+  results.forEach(result => {
+    let statusClass;
+    if (result.status === 'Bloqueado') {
+      statusClass = 'blocked';
+    } else if (result.status === 'Acessível') {
+      statusClass = 'accessible';
+    } else {
+      statusClass = 'not-accessible';
+    }
+
+    const row = document.createElement('tr');
+    row.innerHTML = `
+      <td>${result.site}</td>
+      <td class="${statusClass}">${result.status}</td>
+      <td>${result.ip || 'N/A'}</td>
+    `;
+    tbody.appendChild(row);
+  });
+}
+
+document.getElementById('formatButton').addEventListener('click', function() {
+  const tableRows = document.querySelectorAll('#resultsTable tbody tr');
+  let formattedList = '';
+
+  tableRows.forEach(row => {
+    const site = row.cells[0].textContent;
+    const status = row.cells[1].textContent;
+
+    // Verifica se o status é "Acessível" antes de formatar o link
+    if (status === 'Acessível') {
+      formattedList += `*.${site}             IN CNAME .\n`;
+      formattedList += `${site}               IN CNAME .\n`;
+    }
+  });
+
+  // Atualiza o conteúdo da textarea com a lista formatada
+  document.getElementById('formattedList').textContent = formattedList;
+
+  // Oculta a tabela e exibe a área de texto
+  document.getElementById('resultsTable').style.display = 'none';
+  document.getElementById('formattedList').style.display = 'block';
+});
+</script>
+</body>
+
+</html>
